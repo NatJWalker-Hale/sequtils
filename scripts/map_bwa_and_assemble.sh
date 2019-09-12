@@ -2,7 +2,7 @@
 
 # indexes in fasta and maps paired end reads with bwa. Provide, in order, infasta, R1, R2, threads, path to unicycler
 
-$UNICYCLER=$5
+UNICYCLER=$5
 prefix=$(echo $2 | cut -f1 -d"_")
 
 bwa index $1
