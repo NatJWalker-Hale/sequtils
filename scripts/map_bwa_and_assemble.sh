@@ -15,4 +15,4 @@ gzip -f "$prefix"_mapped_R2.fq
 
 rm tmp.bam
 
-$UNICYCLER -1 "$prefix"_mapped_R1.fq -2 "$prefix"_mapped_R2.fq -o unicycler_out -t $4
+$UNICYCLER -1 "$prefix"_mapped_R1.fq.gz -2 "$prefix"_mapped_R2.fq.gz -o unicycler_out -t $4
