@@ -100,15 +100,27 @@ if __name__ == "__main__":
     # check translations against aa
     for key, value in orf_dict.items():
         match = False
+        modmatch = False
         for f in value:
             if f[1].rstrip("*") == aa_dict[key].rstrip("*"):
                 match = True
+                modmatch = True
                 print(">"+key)
                 print(f[0])
         if not match:
-            print(">"+key)
-            print(cds_dict[key])
-            sys.stderr.write("Warning: no match found for "+key+"! Printing original CDS\n")  
+            for f in value:
+                if f[1].rstrip("*")[:-1] == aa_dict[key].rstrip("*"):
+                    print(">"+key)
+                    if f[0][-3:] in STOP:
+                        print(f[0][:-6])
+                    else: 
+                        print(f[0][:-3])
+                    sys.stderr.write("Warning: "+key+" matched up to final amino acid! Printing original CDS\n")
+                    modmatch = True
+        if not modmatch:
+                print(">"+key)
+                print(cds_dict[key])
+                sys.stderr.write("Warning: no match found for "+key+"! Printing original CDS\n")  
 
 
 
