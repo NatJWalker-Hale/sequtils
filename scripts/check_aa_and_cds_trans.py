@@ -115,7 +115,7 @@ if __name__ == "__main__":
                         print(f[0][:-6])
                     else: 
                         print(f[0][:-3])
-                    sys.stderr.write("Warning: "+key+" matched up to final amino acid! Printing original CDS\n")
+                    sys.stderr.write("Warning: "+key+" matched up to final amino acid! Printing modified inferred CDS\n")
                     modmatch = True
         if not modmatch:
                 print(">"+key)
