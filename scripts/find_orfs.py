@@ -6,7 +6,6 @@ START = ["ATG","atg"] # for case insensitivity
 
 def find_orf(seq,any_start=True,overlaps=True):
     i = 0
-    orfnum = 0
     currorf = ""
     orflist = []
     going = False
