@@ -11,6 +11,8 @@ def find_orf(seq,any_start=True,overlaps=True):
     going = False
     while i < len(seq):
         codon = seq[i:i+3]
+        if "N" in codon or "n" in codon or "-" in codon:
+            codon = "NNN" # make all semi-ambiguous codons ambiguous
         # first, establish start of the ORF
         if not going:
             if any_start:
@@ -94,7 +96,7 @@ if __name__ == "__main__":
         orfs = find_orf_all(value)
         orflist = []
         for orf in orfs:
-            orflist.append((orf,Seq.translate(orf)))
+            orflist.append((orf,Seq.translate(orf.upper(),gap="N")))
         orf_dict[key] = sorted(orflist, reverse=True, key=lambda x: len(x[0]))
 
     # check translations against aa

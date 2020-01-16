@@ -11,6 +11,8 @@ def find_orf(seq,any_start=True,overlaps=True):
     going = False
     while i < len(seq):
         codon = seq[i:i+3]
+        if "N" in codon or "n" in codon or "-" in codon:
+            codon = "NNN"
         # first, establish start of the ORF
         if not going:
             if any_start:
@@ -88,8 +90,3 @@ if __name__ == "__main__":
         print(key)
         print(value)
     
-
-
-
-
-
