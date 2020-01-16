@@ -10,7 +10,7 @@ def find_orf(seq,any_start=True,overlaps=True):
     orflist = []
     going = False
     while i < len(seq):
-        codon = str(seq[i:i+3])
+        codon = seq[i:i+3]
         # first, establish start of the ORF
         if not going:
             if any_start:
@@ -23,8 +23,10 @@ def find_orf(seq,any_start=True,overlaps=True):
         else:
             if codon not in STOP:
                 if i+3 >= len(seq):
-                    currorf += codon
-                    if len(currorf)%3 == 0:
+                    if len(codon) == 3:
+                        currorf += codon
+                        orflist.append(currorf)
+                    else:
                         orflist.append(currorf)
                 else:
                     currorf += codon
@@ -32,8 +34,7 @@ def find_orf(seq,any_start=True,overlaps=True):
                         orflist.extend(find_orf(seq[i:],any_start=False,overlaps=False))
             elif codon in STOP:
                 currorf += codon
-                if len(currorf)%3 == 0:
-                    orflist.append(currorf)
+                orflist.append(currorf)
                 going = False
                 currorf = ""
         i += 3
@@ -83,7 +84,9 @@ if __name__ == "__main__":
         for orf in orfs:
             orflist.append((orf,Seq.translate(orf)))
         orf_dict[key] = sorted(orflist, reverse=True, key=lambda x: len(x[0]))
-    print(orf_dict)
+    for key,value in orf_dict.items():
+        print(key)
+        print(value)
     
 
 
