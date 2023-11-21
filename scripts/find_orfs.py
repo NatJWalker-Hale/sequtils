@@ -1,18 +1,20 @@
+#! /usr/bin/python3
+
 import sys
 from Bio import Seq
 
-STOP = ["TAA","taa","TGA","tga","TAG","tag"] # for case insensitivity 
-START = ["ATG","atg"] # for case insensitivity 
+STOP = ["TAA", "taa", "TGA", "tga", "TAG", "tag"]  # for case insensitivity
+START = ["ATG", "atg"]  # for case insensitivity
 
-def find_orf(seq,any_start=True,overlaps=True):
+
+def find_orf(seq, any_start=True, overlaps=True):
     i = 0
     currorf = ""
     orflist = []
     going = False
     while i < len(seq):
         codon = seq[i:i+3]
-        if "N" in codon or "n" in codon or "-" in codon:
-            codon = "NNN"
+        codon.replace("-", "N")
         # first, establish start of the ORF
         if not going:
             if any_start:
@@ -33,7 +35,8 @@ def find_orf(seq,any_start=True,overlaps=True):
                 else:
                     currorf += codon
                     if overlaps:
-                        orflist.extend(find_orf(seq[i:],any_start=False,overlaps=False))
+                        orflist.extend(find_orf(seq[i:], any_start=False,
+                                                overlaps=False))
             elif codon in STOP:
                 currorf += codon
                 orflist.append(currorf)
@@ -42,8 +45,9 @@ def find_orf(seq,any_start=True,overlaps=True):
         i += 3
     return orflist
 
+
 def find_orf_all(seq):
-    """Given a string representing a coding sequence, find all ORFs for 
+    """Given a string representing a coding sequence, find all ORFs for
     all frames on the + and - strand"""
     all_orfs = []
     all_orfs.extend(find_orf(seq))
@@ -55,7 +59,9 @@ def find_orf_all(seq):
     all_orfs.extend(find_orf(revc[2:]))
     return list(set(all_orfs))
 
-def parse_fasta(path): # courtesy of Jonathan Chang https://gist.github.com/jonchang/6471846
+
+def parse_fasta(path):  # courtesy of Jonathan Chang
+    # https://gist.github.com/jonchang/6471846
     """Given a path tries to parse a fasta file. Returns an iterator which
     yields a (name, sequence) tuple"""
     with open(path) as handle:
@@ -65,13 +71,14 @@ def parse_fasta(path): # courtesy of Jonathan Chang https://gist.github.com/jonc
             if line.startswith(">"):
                 if name:
                     yield name, sequence
-                name = line[1:]
+                name = line[1:].split(" ")[0]
                 sequence = ""
                 continue
             sequence += line
         # yield the last sequence
         if name and sequence:
             yield name, sequence
+
 
 if __name__ == "__main__":
     if len(sys.argv) != 2:
@@ -84,9 +91,14 @@ if __name__ == "__main__":
         orfs = find_orf_all(value)
         orflist = []
         for orf in orfs:
-            orflist.append((orf,Seq.translate(orf)))
+            orflist.append((orf, Seq.translate(orf)))
         orf_dict[key] = sorted(orflist, reverse=True, key=lambda x: len(x[0]))
-    for key,value in orf_dict.items():
-        print(key)
-        print(value)
-    
+
+    for k, v in orf_dict.items():
+        count = 0
+        for i in v:
+            print(">" + str(k) + "_ORF" + str(count) + "_cds")
+            print(i[0])
+            print(">" + str(k) + "_ORF" + str(count) + "_pep")
+            print(i[1])
+            count += 1
