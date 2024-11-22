@@ -6,73 +6,13 @@ import re
 import sys
 import argparse
 import gffutils
-
-
-def parse_cds_from_genomic_ncbi(path: str):
-    """
-    Given a path tries to parse a fasta file. Returns an iterator which
-    yields a (name, sequence) tuple
-    """
-    with open(path, "r", encoding="utf-8") as handle:
-        name = sequence = ""
-        for line in handle:
-            line = line.strip()
-            if line.startswith(">"):
-                if name:
-                    yield name, sequence
-                name = re.search(r'\[protein_id=(.*?)\]', line).group(1)
-                sequence = ""
-                continue
-            sequence += line
-        # yield the last sequence
-        if name and sequence:
-            yield name, sequence
-
-
-def parse_protein_ncbi(path: str):
-    """Given a path tries to parse a fasta file. Returns an iterator which
-    yields a (name, sequence) tuple"""
-    with open(path, "r", encoding="utf-8") as handle:
-        name = sequence = ""
-        for line in handle:
-            line = line.strip()
-            if line.startswith(">"):
-                if name:
-                    yield name, sequence
-                name = line[1:].split(" ")[0]
-                sequence = ""
-                continue
-            sequence += line
-        # yield the last sequence
-        if name and sequence:
-            yield name, sequence
-
-
-def parse_fasta_lengths(path: str):
-    """
-    parse FASTA line by line and return length of each sequence
-    """
-    lengths = {}
-    with open(path, "r", encoding="utf-8") as f:
-        length = 0
-        line = f.readline().strip()  # here we read lines into mem one at a time
-        while line:
-            if line.startswith(">"):
-                if length:
-                    lengths[seqid] += length
-                seqid = line.split()[0].strip().lstrip(">")
-                length = 0
-                lengths[seqid] = 0
-            else:
-                length += len(line)
-            line = f.readline().strip()
-        lengths[seqid] += length # write lengths of final contig
-    return lengths
+from typing import assert_never
+import sequence as sq
 
 
 def get_chromosomes(feature_db: gffutils.FeatureDB) -> dict[tuple]:
     """
-    returns a dictionary of seqid: (chromosome names, gene count)
+    returns a dictionary of seqid: chromosome names
     """
     seqids = sorted(
         list(
@@ -84,58 +24,126 @@ def get_chromosomes(feature_db: gffutils.FeatureDB) -> dict[tuple]:
     return {(id): (f"Chr{i+1}" if "NC_" in id else id) for i, id in enumerate(seqids)}
 
 
-def get_lens_and_gff(genome_fasta: str, chrom_corres: dict, feature_db: gffutils.FeatureDB,
-                     pref: str) -> dict:
+def get_chromosomes_gwh(path: str):
     """
-    parse FASTA line by line and return length of each sequence
+    parse FASTA headers to find sequence IDs with chromosome info
+    """
+    with open(path, "r", encoding="utf-8") as f:
+        name = chrom = ""
+        line = f.readline().strip()  # here we read lines into mem one at a time
+        while line:
+            if line.startswith(">"):
+                if name:
+                    yield name, chrom
+                name = line[1:].split("\t")[0]
+                chrom = re.search(r'OriSeqID=(.*?)\t', line).group(1)
+            line = f.readline().strip()
+        yield name, chrom
+
+
+def parse_cds_and_pep(cds_path: str, pep_path: str, ncbi=True, phytozome=False,
+                      gwh=False, ensembl=False) -> dict[str]:
+    """
+    parse input sequence files
+    """
+    if ncbi:
+        cds_dict = dict(sq.parse_cds_from_genomic_ncbi(cds_path))
+        pep_dict = dict(sq.parse_protein_ncbi(pep_path))
+    elif phytozome:
+        cds_dict = dict(sq.parse_cds_phytozome(cds_path))
+        pep_dict = dict(sq.parse_protein_phytozome(pep_path))
+    elif gwh:
+        cds_dict = dict(sq.parse_fasta_gwh(cds_path))
+        pep_dict = dict(sq.parse_fasta_gwh(pep_path))
+    elif ensembl:
+        cds_dict = dict(sq.parse_cds_ensembl(cds_path))
+        pep_dict = dict(sq.parse_protein_ensembl(pep_path))
+
+    return cds_dict, pep_dict
+
+
+def get_lens_and_gff(genome_fasta: str, chrom_corres: dict, feature_db: gffutils.FeatureDB,
+                     pref: str, ncbi=True, phytozome=False, gwh=False, ensembl=False) -> dict:
+    """
+    UPDATE
     """
 
-    lengths = parse_fasta_lengths(genome_fasta)
+    # get the lengths from the genome fasta
+    lengths = sq.parse_fasta_lengths(genome_fasta)
 
     out_lengths = {}
     out_gff = []
     chrom_id = 0
     unplaced_id = 0
 
+    # iterate over the seqids in lengths
     for seqid, length in lengths.items():
         gene_id = 0
         if "Chr" in chrom_corres[seqid]:
+            # naming scheme for genes in chromosomes
             chrom_id_str = f"{chrom_id+1}"
             chrom_id += 1
         else:
+            # naming scheme for unplaced scaffolds
             chrom_id_str = f"u{unplaced_id+1}"
             unplaced_id += 1
 
+        # iterate over genes in the current sequence
         for f in feature_db.region(seqid, featuretype="gene"):
             tmp = 0
+            p_id = ""
             protein_coding = False
+            # iterate over children of gene entries
             for m in feature_db.children(f):
+                # filter e.g. non-coding in NCBI
                 if m.featuretype == "mRNA":
                     protein_coding = True
+
+                    # use phytozomes internal designation of primary transcript for consistency
+                    # with primary only FASTAs
+                    if phytozome:
+                        # print(m["longest"])
+                        if m["longest"][0] == '1':
+                            main = m
+                            # break out
+                            break
                     # print(f"{seqid} {f.id} {c.id} protein coding")
 
-                    # width = sum(c.end - c.start for c in feature_db.children(m)
-                    #              if c.featuretype == "CDS")
+                    # otherwise, calculate length of alt transcripts as sum of CDS element lengths
+                    width = sum(c.end - c.start for c in feature_db.children(m)
+                                 if c.featuretype == "CDS")
 
-                    width = m.end - m.start
+                    # width = m.end - m.start
                     # print(f"{width}\t{m.end - m.start}")
 
+                    # pick the longest transcript
                     if width > tmp:
                         tmp = width
                         main = m
 
+            # skip e.g. ncRNA
             if protein_coding:
 
-                p_id = next(c["protein_id"] for c in feature_db.children(main)
-                            if c.featuretype == "CDS")[0]
-                # p_id = "test"
+                if ncbi:
+                    # extract protein ID from CDS elements, these are identical in NCBI formats
+                    p_id = next(c["protein_id"] for c in feature_db.children(main)
+                                if c.featuretype == "CDS")[0]
+                    # p_id = "test"
+                if phytozome:
+                    # ID that matches phytozome FASTAs is element Name of Attributes
+                    p_id = main["Name"][0]
+                    # print(p_id)
+                if gwh:
+                    p_id = main.id
+                if ensembl:
+                    p_id = main["transcript_id"][0] + ".1"
 
-                out_gff.append((chrom_corres[seqid],
-                                f"{pref}{chrom_id_str}g{gene_id+1:05d}",
-                                f"{main.start}",
+                out_gff.append((chrom_corres[seqid],  # replace seqid with new chrom designation
+                                f"{pref}{chrom_id_str}g{gene_id+1:05d}", # 1-indexed
+                                f"{main.start}",  # use mRNA coordinates
                                 f"{main.end}",
                                 main.strand,
-                                f"{gene_id+1}",
+                                f"{gene_id+1}", # 1-indexed
                                 p_id))
                 gene_id += 1
 
@@ -186,9 +194,19 @@ Column    Information    Explanation
      1            Chr    Chromosome number
      2         Length    Length of chromosome sequences
      3         Number    Number of chromosome genes
+
+finally, modifies the provided CDS and peptide FASTAs to include the 
+new and the old names
 """
                                     )
 
+    group = parser.add_mutually_exclusive_group(required=True)
+    group.add_argument("--ncbi", help="mode for NCBI formatted files", action="store_true")
+    group.add_argument("--phytozome", help="mode for Phytozome formatted files",
+                       action="store_true")
+    group.add_argument("--gwh", help="mode for Genome Warehouse formatted files",
+                       action="store_true")
+    group.add_argument("--ensembl", help="mode for ensembl formatted files", action="store_true")
     parser.add_argument("GFF", help="input GFF")
     parser.add_argument("fasta", help="genome FASTA")
     parser.add_argument("CDS", help="CDS FASTA")
@@ -203,20 +221,15 @@ Column    Information    Explanation
         db = gffutils.create_db(args.GFF, dbname, id_spec={'gene': 'ID',
                                                            'mRNA': 'ID'},
                                )
+    cds_seqs, pep_seqs = parse_cds_and_pep(args.CDS, args.pep, args.ncbi, args.phytozome, args.gwh,
+                                           args.ensembl)
 
-    # print(db['gene-LOC131165771'])
+    if args.ncbi or args.phytozome or args.ensembl:
+        chroms = get_chromosomes(db)
+    else:
+        chroms = dict(get_chromosomes_gwh(args.fasta))
 
-    # for m in db.children('gene-LOC131165771'):
-    #     if m.featuretype == "mRNA":
-    #         for c in db.children(m):
-    #             if c.featuretype == "CDS":
-    #                 print(c["protein_id"])      
-
-    chroms = get_chromosomes(db)
-
-    lens, gff = get_lens_and_gff(args.fasta, chroms, db, args.prefix)
-
-    cds_seqs = dict(parse_cds_from_genomic_ncbi(args.CDS))
-    pep_seqs = dict(parse_protein_ncbi(args.pep))
+    lens, gff = get_lens_and_gff(args.fasta, chroms, db, args.prefix, args.ncbi, args.phytozome,
+                                 args.gwh, args.ensembl)
 
     write_outputs(lens, gff, cds_seqs, pep_seqs, args.prefix)
