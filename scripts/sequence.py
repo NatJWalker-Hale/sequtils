@@ -23,6 +23,8 @@ def parse_cds_from_genomic_ncbi(path: str):
             if line.startswith(">"):
                 if name:
                     yield name, sequence
+                if re.search(r'\[pseudo=true\]', line):
+                    continue
                 name = re.search(r'\[protein_id=(.*?)\]', line).group(1)
                 sequence = ""
                 continue
@@ -150,6 +152,29 @@ def parse_protein_ensembl(path: str):
                 if name:
                     yield name, sequence
                 name = re.search(r'transcript:(.*?) ', line).group(1)
+                sequence = ""
+                continue
+            sequence += line
+        # yield the last sequence
+        if name and sequence:
+            yield name, sequence
+
+
+def parse_fasta_first_header(path: str):
+    """
+    courtesy of Jonathan Chang https://gist.github.com/jonchang/6471846
+
+    given a path tries to parse a fasta file. Returns an iterator which yields a (name, sequence) 
+    tuple
+    """
+    with open(path, "r", encoding="utf-8") as handle:
+        name = sequence = ""
+        for line in handle:
+            line = line.strip()
+            if line.startswith(">"):
+                if name:
+                    yield name, sequence
+                name = line[1:].split(" ")[0]  # we take the first name before a space to split
                 sequence = ""
                 continue
             sequence += line

@@ -6,7 +6,6 @@ import re
 import sys
 import argparse
 import gffutils
-from typing import assert_never
 import sequence as sq
 
 
@@ -21,7 +20,7 @@ def get_chromosomes(feature_db: gffutils.FeatureDB) -> dict[tuple]:
                    )
 
     # here we are assuming input from e.g. NCBI has chr number in order of increasing seq accession
-    return {(id): (f"Chr{i+1}" if "NC_" in id else id) for i, id in enumerate(seqids)}
+    return {(id): (f"Chr{i+1}" if "NC_" in id or "CM" in id else id) for i, id in enumerate(seqids)}
 
 
 def get_chromosomes_gwh(path: str):
@@ -41,8 +40,44 @@ def get_chromosomes_gwh(path: str):
         yield name, chrom
 
 
+def get_chromosomes_ensembl(path: str):
+    """
+    parse FASTA headers to find sequence IDs with chromosome info
+    """
+    with open(path, "r", encoding="utf-8") as f:
+        name = chrom = ""
+        line = f.readline().strip()  # here we read lines into mem one at a time
+        while line:
+            if line.startswith(">"):
+                if name:
+                    yield name, chrom
+                name = line[1:].split(" ")[0]
+                chrom = f"Chr{name}"
+            line = f.readline().strip()
+        yield name, chrom
+
+
+def get_chromosomes_fasta(path: str):
+    """
+    parse FASTA headers to find sequence IDs with chromosome info
+    """
+    with open(path, "r", encoding="utf-8") as f:
+        name = chrom = ""
+        line = f.readline().strip()  # here we read lines into mem one at a time
+        i = 0
+        while line:
+            if line.startswith(">"):
+                i += 1
+                if name:
+                    yield name, chrom
+                name = line[1:].split("\t")[0]
+                chrom = f"Chr{i}" if "NC_" in name or "CM" in name or "chr" in name else name
+            line = f.readline().strip()
+        yield name, chrom
+
+
 def parse_cds_and_pep(cds_path: str, pep_path: str, ncbi=True, phytozome=False,
-                      gwh=False, ensembl=False) -> dict[str]:
+                      gwh=False, ensembl=False, maker=False) -> dict[str]:
     """
     parse input sequence files
     """
@@ -58,18 +93,28 @@ def parse_cds_and_pep(cds_path: str, pep_path: str, ncbi=True, phytozome=False,
     elif ensembl:
         cds_dict = dict(sq.parse_cds_ensembl(cds_path))
         pep_dict = dict(sq.parse_protein_ensembl(pep_path))
+    elif maker:
+        cds_dict = dict(sq.parse_fasta_first_header(cds_path))
+        pep_dict = dict(sq.parse_fasta_first_header(pep_path))
+    else:
+        cds_dict = dict(sq.parse_fasta_first_header(cds_path))
+        pep_dict = dict(sq.parse_fasta_first_header(pep_path))
 
     return cds_dict, pep_dict
 
 
 def get_lens_and_gff(genome_fasta: str, chrom_corres: dict, feature_db: gffutils.FeatureDB,
-                     pref: str, ncbi=True, phytozome=False, gwh=False, ensembl=False) -> dict:
+                     pref: str, get_lengths=True, ncbi=True, phytozome=False, gwh=False,
+                     ensembl=False, maker=False) -> dict:
     """
     UPDATE
     """
 
     # get the lengths from the genome fasta
-    lengths = sq.parse_fasta_lengths(genome_fasta)
+    if get_lengths:
+        lengths = sq.parse_fasta_lengths(genome_fasta)
+    else:
+        lengths = {v: 0 for v in chrom_corres.values()}
 
     out_lengths = {}
     out_gff = []
@@ -79,7 +124,7 @@ def get_lens_and_gff(genome_fasta: str, chrom_corres: dict, feature_db: gffutils
     # iterate over the seqids in lengths
     for seqid, length in lengths.items():
         gene_id = 0
-        if "Chr" in chrom_corres[seqid]:
+        if "Chr" in chrom_corres[seqid] or "chr" in chrom_corres[seqid]:
             # naming scheme for genes in chromosomes
             chrom_id_str = f"{chrom_id+1}"
             chrom_id += 1
@@ -133,7 +178,7 @@ def get_lens_and_gff(genome_fasta: str, chrom_corres: dict, feature_db: gffutils
                     # ID that matches phytozome FASTAs is element Name of Attributes
                     p_id = main["Name"][0]
                     # print(p_id)
-                if gwh:
+                if gwh or maker:
                     p_id = main.id
                 if ensembl:
                     p_id = main["transcript_id"][0] + ".1"
@@ -155,13 +200,15 @@ def write_outputs(lengths_dict: dict[tuple],
                   gff_list: list[tuple],
                   cds_dict: dict,
                   pep_dict: dict,
-                  prefix: str):
+                  prefix: str,
+                  write_lens = True):
     """
     write the .lens file for WGDI
     """
-    with open(f"{prefix}.lens", "w", encoding="utf-8") as out_lens:
-        for seqid, length_count in lengths_dict.items():
-            out_lens.write(f"{seqid}\t{length_count[0]}\t{length_count[1]}\n")
+    if write_lens:
+        with open(f"{prefix}.lens", "w", encoding="utf-8") as out_lens:
+            for seqid, length_count in lengths_dict.items():
+                out_lens.write(f"{seqid}\t{length_count[0]}\t{length_count[1]}\n")
 
     with open(f"{prefix}.gff", "w", encoding="utf-8") as out_gff:
         with open(f"{prefix}.cds.fa", "w", encoding="utf-8") as out_cds:
@@ -207,6 +254,9 @@ new and the old names
     group.add_argument("--gwh", help="mode for Genome Warehouse formatted files",
                        action="store_true")
     group.add_argument("--ensembl", help="mode for ensembl formatted files", action="store_true")
+    group.add_argument("--maker", help="mode for maker formatted files", action="store_true")
+    parser.add_argument("--no_lens", help="do not parse genome or write .lens file",
+                        action="store_false")
     parser.add_argument("GFF", help="input GFF")
     parser.add_argument("fasta", help="genome FASTA")
     parser.add_argument("CDS", help="CDS FASTA")
@@ -222,14 +272,18 @@ new and the old names
                                                            'mRNA': 'ID'},
                                )
     cds_seqs, pep_seqs = parse_cds_and_pep(args.CDS, args.pep, args.ncbi, args.phytozome, args.gwh,
-                                           args.ensembl)
+                                           args.ensembl, args.maker)
 
-    if args.ncbi or args.phytozome or args.ensembl:
+    if args.ncbi or args.phytozome:
         chroms = get_chromosomes(db)
+    elif args.ensembl:
+        chroms = dict(get_chromosomes_ensembl(args.fasta))
+    elif args.maker:
+        chroms = dict(get_chromosomes_fasta(args.fasta))
     else:
         chroms = dict(get_chromosomes_gwh(args.fasta))
 
-    lens, gff = get_lens_and_gff(args.fasta, chroms, db, args.prefix, args.ncbi, args.phytozome,
-                                 args.gwh, args.ensembl)
+    lens, gff = get_lens_and_gff(args.fasta, chroms, db, args.prefix, args.no_lens, args.ncbi,
+                                 args.phytozome, args.gwh, args.ensembl, args.maker)
 
-    write_outputs(lens, gff, cds_seqs, pep_seqs, args.prefix)
+    write_outputs(lens, gff, cds_seqs, pep_seqs, args.prefix, args.no_lens)
