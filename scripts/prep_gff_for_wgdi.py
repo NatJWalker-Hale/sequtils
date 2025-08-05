@@ -71,7 +71,8 @@ def get_chromosomes_fasta(path: str):
                 if name:
                     yield name, chrom
                 name = line[1:].split("\t")[0]
-                chrom = f"Chr{i}" if "NC_" in name or "CM" in name or "chr" in name else name
+                chrom = f"Chr{i}" if any(x in name for x in ["NC_", "CM", "chr", "Chr"]) else name
+                # chrom = f"Chr{i}" if "NC_" in name or "CM" in name or "chr" in name else name
             line = f.readline().strip()
         yield name, chrom
 
@@ -282,6 +283,8 @@ new and the old names
         chroms = dict(get_chromosomes_fasta(args.fasta))
     else:
         chroms = dict(get_chromosomes_gwh(args.fasta))
+
+    print(chroms)
 
     lens, gff = get_lens_and_gff(args.fasta, chroms, db, args.prefix, args.no_lens, args.ncbi,
                                  args.phytozome, args.gwh, args.ensembl, args.maker)
