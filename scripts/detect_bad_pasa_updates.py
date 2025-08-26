@@ -5,6 +5,24 @@ import os
 import sys
 import argparse
 import gffutils
+import gffutils.interface
+
+
+def write_gene(dbobj: gffutils.interface.FeatureDB, geneid: str) -> str:
+    out_str = ""
+    geneobj = dbobj[geneid]
+    out_str += f"{str(geneobj)}\n"
+    for transcript in dbobj.children(geneobj, featuretype="mRNA"):
+        out_str += f"{str(transcript)}\n"
+        for cds in dbobj.children(transcript, featuretype="CDS"):
+            out_str += f"{str(cds)}\n"
+        for exon in dbobj.children(transcript, featuretype="exon"):
+            out_str += f"{str(exon)}\n"
+        for fputr in dbobj.children(transcript, featuretype="five_prime_UTR"):
+            out_str += f"{str(fputr)}\n"
+        for tputr in dbobj.children(transcript, featuretype="three_prime_UTR"):
+            out_str += f"{str(tputr)}\n"
+    return out_str
 
 
 if __name__ == "__main__":
@@ -40,13 +58,31 @@ if __name__ == "__main__":
                                                                        keep_order=True
         )
 
+    if args.mode == "replace":
+        if args.replace_list:
+            with open(args.replace_list, encoding="utf-8") as f:
+                fix_ids = set(line.strip() for line in f)
+
     for gene in db.features_of_type(featuretype="gene", order_by="featuretype"):  # iterate genes
         transcripts = list(db.children(gene, featuretype="mRNA"))
         if len(transcripts) < 2:
             # only interested in genes with multiple transcripts
-            print(gene)
-            for c in db.children(gene):
-                print(c)
+            if args.mode == "replace":
+                if gene.id not in fix_ids:
+                    print(write_gene(db, gene.id))
+                else:
+                    sys.stderr.write(f"Processing gene {gene.id}\n")
+                    evm_genes = gene.id.split("_")
+                    for g in evm_genes:
+                        print(evmdb[g])
+                        count = 1
+                        for c in evmdb.children(g, order_by="featuretype"):
+                            if c.featuretype == "CDS":
+                                c.attributes['ID'][0] += f".cds{count}"
+                                count += 1
+                                print(c)
+                            else:
+                                print(c)
             continue
             # also no way to tell if genes with single transcript are bad merges except by reads
             # or homology - we do this elsewhere
@@ -65,30 +101,25 @@ if __name__ == "__main__":
             if args.mode == "report":
                 print(f"Gene {gene.id} has isoforms that don't share exons")
             elif args.mode == "replace":
-                if args.replace_list:
-                    with open(args.replace_list, encoding="utf-8") as f:
-                        fix_ids = set(line.strip() for line in f)
-                    if gene.id not in fix_ids:
-                        print(gene)
-                        for c in db.children(gene):
-                            print(c)
-                sys.stderr.write(f"Processing gene {gene.id}\n")
-                evm_genes = gene.id.split("_")
-                for g in evm_genes:
-                    print(evmdb[g])
-                    for c in evmdb.children(g, order_by="featuretype"):
+                if gene.id not in fix_ids:
+                    # print(write_gene(db, gene.id))
+                    continue
+                else:
+                    sys.stderr.write(f"Processing gene {gene.id}\n")
+                    evm_genes = gene.id.split("_")
+                    for g in evm_genes:
+                        print(evmdb[g])
                         count = 1
-                        if c.featuretype == "CDS":
-                            c.attributes['ID'][0] += f".cds{count}"
-                            count += 1
-                            print(c)
-                        else:
-                            print(c)
+                        for c in evmdb.children(g, order_by="featuretype"):
+                            if c.featuretype == "CDS":
+                                c.attributes['ID'][0] += f".cds{count}"
+                                count += 1
+                                print(c)
+                            else:
+                                print(c)
         else:
             if args.mode == "replace":
-                print(gene)
-                for c in db.children(gene):
-                    print(c)
+                print(write_gene(db, gene.id))
 
 
                 # old fixing, too hard
