@@ -93,6 +93,11 @@ if __name__ == "__main__":
         shared_starts = set.intersection(*starts)
         # print(f"Gene {gene.id}", shared_starts)
         shared_ends = set.intersection(*ends)
+        # if gene.id == "evm.TU.CHR07.2578_evm.TU.CHR07.2581":
+        #     print(starts)
+        #     print(ends)
+        #     print(shared_starts)
+        #     print(shared_ends)
         # print(f"Gene {gene.id}", shared_ends)
         # if at least one exon start and exon end is shared then the isoforms share at least one 
         # exon
