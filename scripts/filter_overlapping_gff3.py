@@ -24,6 +24,10 @@ if __name__ == "__main__":
     parser_c.add_argument("reference_gff3", help="input reference gff3 file")
     parser_c.add_argument("blastp_results", help="blastp results of query vs reference, tabular \
                                     format, qseqid sseqid")
+    
+    parser_m = subparser.add_parser("merge", help="merge adjacent genes on same strand with \
+                                    overlapping CDS features")
+    parser_m.add_argument("query_gff3", help="input query gff3 file")
 
     args = parser.parse_args(args=(sys.argv[1:] or ['--help']))
 
@@ -52,10 +56,15 @@ if __name__ == "__main__":
         # do something here to filter out overlapping genes based on a criterion
         sys.exit()
 
+    if args.mode == "merge":
+        # do something here to merge adjacent genes on same strand with overlapping CDS features
+        sys.exit()
+
     # parse blastp results
     if args.mode == "compare":
         with open(args.blastp_results, "r", encoding="utf-8") as infile:
-            blastp_hits = {line.split("\t")[0]: line.split("\t")[1] for line in infile if line.strip()}
+            blastp_hits = {line.split("\t")[0]: line.split("\t")[1] for line in infile if
+                           line.strip()}
         # print(blastp_hits)
 
         # load reference into gffutils db
