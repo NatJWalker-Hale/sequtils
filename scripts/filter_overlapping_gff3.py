@@ -68,19 +68,30 @@ if __name__ == "__main__":
                                                             featuretype="CDS")))
                     print(f"Query gene {gene.id} with {qmax_n_exons} exons "
                             f"matches reference gene {ref_gene_id} with {rmax_n_exons} exons")
-                    if qmax_n_exons != rmax_n_exons:
-                        print(f"WARNING: different number of exons between query and reference. "
-                              f"Check {gene.id} for fixing.")
+                    exons_diff = (qmax_n_exons != rmax_n_exons)
+                        # print(f"WARNING: different number of exons between query and reference. "
+                        #       f"Check {gene.id} for fixing.")
                     # need a secondary check because some genes have same number of exons but are 
                     # still obviously wrong
                     q_gene_length = gene.end - gene.start + 1
                     r_gene_length = rdb[ref_gene_id].end - rdb[ref_gene_id].start + 1
-                    if q_gene_length > 3 * r_gene_length or r_gene_length > 3 * q_gene_length:
-                        print(f"WARNING: different gene lengths between query and reference. "
-                              f"Check {gene.id} for fixing.")
+                    length_diff =  (q_gene_length > 3 * r_gene_length or
+                                    r_gene_length > 3 * q_gene_length)
+                        # print(f"WARNING: different gene lengths between query and reference. "
+                        #       f"Check {gene.id} for fixing.")
+   
                     # need also to add a strand check
-                    if gene.strand != rdb[ref_gene_id].strand:
-                        print(f"WARNING: different strand between query and reference. "
-                              f"Check {gene.id} for fixing.")
+                    print((gene.strand == rdb[ref_gene_id].strand))
+                    strand_same = (gene.strand == feature.strand)
+                        # print(f"WARNING: different strand between query and reference. "
+                        #       f"Check {gene.id} for fixing.")
+                    if exons_diff and length_diff and strand_same:
+                        print(f"WARNING: {gene.id} has overlapping genes on same strand "
+                              f"different exon count and > 3x length, relative to {ref_gene_id}. "
+                              f"Definite fix.")
+                    elif any([exons_diff, length_diff, strand_same]):
+                        print(f"WARNING: {gene.id} has ones of overlapping genes on same strand "
+                              f"different exon count and > 3x length, relative to {ref_gene_id}. "
+                              f"Check fix.")
 
         visited.append(gene.id)
