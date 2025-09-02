@@ -62,13 +62,16 @@ if __name__ == "__main__":
         if args.replace_list:
             with open(args.replace_list, encoding="utf-8") as f:
                 fix_ids = set(line.strip() for line in f)
-
+        print("##gff-version 3", file=sys.stdout)
+    
     for gene in db.features_of_type(featuretype="gene", order_by="featuretype"):  # iterate genes
+        print(f"working on {gene.id}", file=sys.stderr)
         transcripts = list(db.children(gene, featuretype="mRNA"))
         if len(transcripts) < 2:
             # only interested in genes with multiple transcripts
             if args.mode == "replace":
                 if gene.id not in fix_ids:
+                    sys.stderr.write(f"Processing gene {gene.id} - no fix needed\n")
                     print(write_gene(db, gene.id))
                 else:
                     sys.stderr.write(f"Processing gene {gene.id}\n")
@@ -93,13 +96,13 @@ if __name__ == "__main__":
         shared_starts = set.intersection(*starts)
         # print(f"Gene {gene.id}", shared_starts)
         shared_ends = set.intersection(*ends)
-        # if gene.id == "evm.TU.CHR07.2578_evm.TU.CHR07.2581":
+        # if gene.id == "evm.TU.CHR02.1895":
         #     print(starts)
         #     print(ends)
         #     print(shared_starts)
         #     print(shared_ends)
         # print(f"Gene {gene.id}", shared_ends)
-        # if at least one exon start and exon end is shared then the isoforms share at least one 
+        # if at least one exon start and exon end is shared then the isoforms share at least one
         # exon
         if not shared_starts or not shared_ends:
             # no shared exons, so this is a bad merge
@@ -107,8 +110,26 @@ if __name__ == "__main__":
                 print(f"Gene {gene.id} has isoforms that don't share exons")
             elif args.mode == "replace":
                 if gene.id not in fix_ids:
-                    # print(write_gene(db, gene.id))
+                    # we've decided not to fix this one for some reason, so we need to write it
+                    print(write_gene(db, gene.id))
                     continue
+                sys.stderr.write(f"Processing gene {gene.id}\n")
+                evm_genes = gene.id.split("_")
+                for g in evm_genes:
+                    print(evmdb[g])
+                    count = 1
+                    for c in evmdb.children(g, order_by="featuretype"):
+                        if c.featuretype == "CDS":
+                            c.attributes['ID'][0] += f".cds{count}"
+                            count += 1
+                            print(c)
+                        else:
+                            print(c)
+        else:
+            if args.mode == "replace":
+                if gene.id not in fix_ids:
+                    sys.stderr.write(f"Processing gene {gene.id} - no fix needed\n")
+                    print(write_gene(db, gene.id))
                 else:
                     sys.stderr.write(f"Processing gene {gene.id}\n")
                     evm_genes = gene.id.split("_")
@@ -122,9 +143,6 @@ if __name__ == "__main__":
                                 print(c)
                             else:
                                 print(c)
-        else:
-            if args.mode == "replace":
-                print(write_gene(db, gene.id))
 
 
                 # old fixing, too hard

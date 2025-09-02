@@ -14,7 +14,7 @@ if __name__ == "__main__":
 
     parser_d = subparser.add_parser("detect", help="detect overlapping genes")
     parser_d.add_argument("query_gff3", help="input gff3 file")
-    
+
     parser_f = subparser.add_parser("filter", help="filter overlapping genes")
     parser_f.add_argument("query_gff3", help="input gff3 file")
 
@@ -22,12 +22,14 @@ if __name__ == "__main__":
                                     reference")
     parser_c.add_argument("query_gff3", help="input query gff3 file")
     parser_c.add_argument("reference_gff3", help="input reference gff3 file")
-    parser_c.add_argument("blastp_results", help="blastp results of query vs reference, tabular \
-                                    format, qseqid sseqid")
-    
+    parser_c.add_argument("blastp_results", help="blastp results of query vs reference, 1 hit per \
+                           query, tabular format, qseqid sseqid")
+
     parser_m = subparser.add_parser("merge", help="merge adjacent genes on same strand with \
-                                    overlapping CDS features")
+                                    overlapping CDS features. NOTE: not implemented yet")
     parser_m.add_argument("query_gff3", help="input query gff3 file")
+    parser_m.add_argument("blastp_results", help="blastp results of query vs reference, 1 hit per \
+                           query, tabular format, qseqid sseqid qcovhsp")
 
     args = parser.parse_args(args=(sys.argv[1:] or ['--help']))
 
@@ -47,18 +49,86 @@ if __name__ == "__main__":
             for feature in qdb.region(f"{gene.seqid}:{gene.start}-{gene.end}", featuretype="gene"):
                 if feature.id in visited:
                     continue
-                if gene.id != feature.id:
-                    print(f"{gene.id} with strand {gene.strand} overlaps with {feature.id} "
-                        f"with strand {feature.strand}")
+                if list(qdb.children(gene, featuretype="CDS")):  # only look at coding genes
+                    exon_start = [cds.start for cds in qdb.children(gene, featuretype="CDS")]
+                    exon_end = [cds.end for cds in qdb.children(gene, featuretype="CDS")]
+                    coding_start = min(exon_start)
+                    coding_end = max(exon_end)
+                    feature_exon_start = [cds.start for cds in qdb.children(feature,
+                                                                            featuretype="CDS")]
+                    feature_exon_end = [cds.end for cds in qdb.children(feature,
+                                                                        featuretype="CDS")]
+                    feature_coding_start = min(feature_exon_start)
+                    feature_coding_end = max(feature_exon_end)
+                    if gene.id != feature.id:
+                        if any(set(exon_start).intersection(set(feature_exon_start))) or any(
+                            set(exon_end).intersection(set(feature_exon_end))):
+                            print(f"{gene.id} with strand {gene.strand} exon overlaps "
+                            f"{feature.id} with strand {feature.strand}")
+                        elif (feature_coding_start >= coding_start and
+                              feature_coding_end <= coding_end):
+                            print(f"{gene.id} with strand {gene.strand} coding overlaps "
+                            f"{feature.id} with strand {feature.strand}")
+                        elif feature.start >= gene.start and feature.end <= gene.end:
+                            print(f"{gene.id} with strand {gene.strand} fully contains "
+                            f"{feature.id} with strand {feature.strand}")
+                        else:
+                            print(f"{gene.id} with strand {gene.strand} overlaps with {feature.id} "
+                                f"with strand {feature.strand}")
             visited.append(gene.id)
 
     if args.mode == "filter":
         # do something here to filter out overlapping genes based on a criterion
-        sys.exit()
+        # allow fully contained overlaps on different strands
+        # allow overlaps on different strands
+        # remove full contained genes on same strand
+        # for overlapping genes on same strand, keep the one with the longest CDS
+        remove = []
+        visited = []
+        for gene in qdb.features_of_type(featuretype="gene", order_by="featuretype"):
+            for feature in qdb.region(f"{gene.seqid}:{gene.start}-{gene.end}", featuretype="gene"):
+                if feature.id in visited:
+                    continue
+                if list(qdb.children(gene, featuretype="CDS")):  # only look at coding genes
+                    exon_start = [cds.start for cds in qdb.children(gene, featuretype="CDS")]
+                    exon_end = [cds.end for cds in qdb.children(gene, featuretype="CDS")]
+                    coding_start = min(exon_start)
+                    coding_end = max(exon_end)
+                    feature_exon_start = [cds.start for cds in qdb.children(feature,
+                                                                            featuretype="CDS")]
+                    feature_exon_end = [cds.end for cds in qdb.children(feature,
+                                                                        featuretype="CDS")]
+                    feature_coding_start = min(feature_exon_start)
+                    feature_coding_end = max(feature_exon_end)
+                    # DEBUG
+                    # print(coding_start, coding_end, feature_coding_start, feature_coding_end)
+                    if gene.id != feature.id:
+                        if gene.strand != feature.strand:
+                            continue
+                        if not (feature_coding_start > gene.start or
+                                feature_coding_end < gene.end):
+                            # gene overlaps, but not coding overlap - we let these through
+                            continue
+                        if feature.start > gene.start and feature.end < gene.end:  # fully contained
+                            remove.append(feature.id)
+                        else:
+                            gene_cds_length = sum(cds.end - cds.start + 1 for cds in
+                                                qdb.children(gene, featuretype="CDS"))
+                            feature_cds_length = sum(cds.end - cds.start + 1 for cds in
+                                                    qdb.children(feature, featuretype="CDS"))
+                            if gene_cds_length >= feature_cds_length:
+                                remove.append(feature.id)
+                            else:
+                                remove.append(gene.id)
+            visited.append(gene.id)
+        for g in remove:
+            print(g)
+               
 
     if args.mode == "merge":
         # do something here to merge adjacent genes on same strand with overlapping CDS features
         sys.exit()
+        # put this in the too hard basket, maybe come back to it later
 
     # parse blastp results
     if args.mode == "compare":
