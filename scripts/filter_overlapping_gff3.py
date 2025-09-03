@@ -105,17 +105,19 @@ if __name__ == "__main__":
                     if gene.id != feature.id:
                         if gene.strand != feature.strand:
                             continue
-                        if not (feature_coding_start > gene.start or
-                                feature_coding_end < gene.end):
+                        if ((coding_end < feature.start and feature_coding_start > gene.end)):
+                            print(f"DEBUG: {coding_end}, {feature_coding_start}" )
+                            print(f"DEBUG: {gene.start}, {gene.end}, {feature_coding_start}, {feature_coding_end}" )
                             # gene overlaps, but not coding overlap - we let these through
+                            print(f"skipping {gene.id}-{feature.id} overlap of non-coding exonics")
                             continue
                         if feature.start > gene.start and feature.end < gene.end:  # fully contained
                             remove.append(feature.id)
                         else:
                             gene_cds_length = sum(cds.end - cds.start + 1 for cds in
-                                                qdb.children(gene, featuretype="CDS"))
+                                                  qdb.children(gene, featuretype="CDS"))
                             feature_cds_length = sum(cds.end - cds.start + 1 for cds in
-                                                    qdb.children(feature, featuretype="CDS"))
+                                                     qdb.children(feature, featuretype="CDS"))
                             if gene_cds_length >= feature_cds_length:
                                 remove.append(feature.id)
                             else:
@@ -123,7 +125,6 @@ if __name__ == "__main__":
             visited.append(gene.id)
         for g in remove:
             print(g)
-               
 
     if args.mode == "merge":
         # do something here to merge adjacent genes on same strand with overlapping CDS features
