@@ -105,11 +105,12 @@ if __name__ == "__main__":
                     if gene.id != feature.id:
                         if gene.strand != feature.strand:
                             continue
-                        if ((coding_end < feature.start and feature_coding_start > gene.end)):
-                            print(f"DEBUG: {coding_end}, {feature_coding_start}" )
-                            print(f"DEBUG: {gene.start}, {gene.end}, {feature_coding_start}, {feature_coding_end}" )
+                        if (coding_end < feature.start and feature_coding_start > gene.end):
+                            # print(f"DEBUG: {coding_end}, {feature_coding_start}" )
+                            # print(f"DEBUG: {gene.start}, {gene.end}, {feature_coding_start}, {feature_coding_end}" )
                             # gene overlaps, but not coding overlap - we let these through
-                            print(f"skipping {gene.id}-{feature.id} overlap of non-coding exonics")
+                            print(f"skipping {gene.id}-{feature.id} overlap of non-coding exonics",
+                                  file=sys.stderr)
                             continue
                         if feature.start > gene.start and feature.end < gene.end:  # fully contained
                             remove.append(feature.id)

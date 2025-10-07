@@ -28,19 +28,23 @@ if __name__ == "__main__":
     print("##gff-version 3")
     print(f"# {" ".join(sys.argv)}")
     num = 100
+    unnum = 100
+    unplaced = False
     chrom = ""
     for gene in db.features_of_type(featuretype="gene", order_by="featuretype"):
         if gene.seqid != chrom:  # new chr
             chrom = gene.seqid  # set chr
-            if "CHR" in gene.seqid:
+            if "CHR" in chrom:
                 num = 100  # reset number if we go to a new chrom
             # otherwise for unplaced, we just keep counting
         if "CHR" in chrom:  # expects seqids to be CHR01 etc.
             chrom_num = chrom.lstrip("CHR")  # leave just number
+            new_id = f"{args.sp}{chrom_num}G{str(num).zfill(7)}"  # pad to 7 digits
+            num += 100  # iterate num
         else:
             chrom_num = "Un"  # for unplaced scaffolds/contigs
-        new_id = f"{args.sp}{chrom_num}G{str(num).zfill(7)}"  # pad to 7 digits
-        num += 100  # iterate num
+            new_id = f"{args.sp}{chrom_num}G{str(unnum).zfill(7)}"  # pad to 7 digits
+            unnum += 100  # iterate num
 
         # now for attributes we need specific formatting
         gene.attributes['ID'] = new_id
